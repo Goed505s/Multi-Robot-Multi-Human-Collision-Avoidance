@@ -3,12 +3,28 @@
 % Sean Wilson
 % 07/2019
 
-N = 2;
 %initial_positions = generate_initial_conditions(N, 'Spacing', 0.5);
-initial_positions = [ -1.0450, 0; -0.4450, 0 ;-0.4696, 0];
+
+N = 4;
+initial_positions = [ -1.0450, 0, 1, 0.5; -0.5, 0 , 0, 0; 0, 0, 0, 0];
+final_goal_points = [ 0, 0, 0, 0; 0, 0, 0, 0; 0, 0, 0, 0];
+is_human = [0, 0, 1, 1];
+
+
+numHumans = 2;
+numRobots = 2;
+
+rateHuman = [0.16, 0.20];
+rateRobot = 0.3;
+
+%N = 2;
+%initial_positions = [ -1.0450, 0; -0.5, 0 ; 0, 0];
+%final_goal_points = [ 0, 0;  0, 0; 0, 0];
+%numHumans = 1;
+%numRobots = 1;
 
 r = Robotarium('NumberOfRobots', N, 'ShowFigure', true, 'InitialConditions', initial_positions);
-
+obstacles = cell(10, 1);
 % Create a barrier certificate so that the robots don't collide
 si_barrier_certificate = create_si_barrier_certificate();
 si_to_uni_dynamics = create_si_to_uni_dynamics();
@@ -22,7 +38,7 @@ MAX_Y=20;
 MAX_VAL=1;
 %This array stores the coordinates of the map and the 
 %Objects in each coordinate
-MAP=(ones(MAX_X,MAX_Y));
+MAP=(zeros(MAX_X,MAX_Y));
 
 % Obtain Obstacle, Target and Robot Position
 % Initialize the MAP with input values
@@ -41,24 +57,34 @@ n=0;%Number of Obstacles
 % BEGIN Interactive Obstacle, Target, Start Location selection
 
 but=0;
-while (but ~= 1) %Repeat until the Left button is not clicked
+targetAmount = numRobots;
+counter = 1;
+xTarget(targetAmount) = 0;
+yTarget(targetAmount) = 0;
+
+while (counter < (targetAmount + 1)) %Repeat until the Left button is not clicked
     [xvalOG,yvalOG,but]=ginput(1);
+    xTarget(counter) = ((xvalOG + 1.5) / 3) * 30 + 1;
+    yTarget(counter) = ((yvalOG + 1) / 2) * 20 + 1;
+    
+    xTarget(counter)=floor(xTarget(counter));
+    yTarget(counter)=floor(yTarget(counter));
+    counter = counter + 1;
+    plot(xvalOG,yvalOG,'gd');
+    text(xvalOG,yvalOG,'Target');
 end
 %% Adjusting to robotarium map
-xTarget = ((xvalOG + 1.5) / 3) * 30 + 1;
-yTarget = ((yvalOG + 1) / 2) * 20 + 1;
 
-xTarget=floor(xTarget);
-yTarget=floor(yTarget);
-xval = xTarget;
-yval = yTarget;
+%xval = xTarget;
+%yval = yTarget;
 
-MAP(xval,yval)=0;%Initialize MAP with location of the target
+%MAP(xval,yval)=0;%Initialize MAP with location of the target
 
-plot(xvalOG,yvalOG,'gd');
-text(xvalOG,yvalOG,'Target');
 
+
+obstacleNum = 0;
 while but == 1
+    obstacleNum = obstacleNum+1;
     [xvalOG,yvalOG,but] = ginput(1);
     %% Adjusting to robotarium map
     xval = ((xvalOG + 1.5) / 3) * 30 + 1;
@@ -68,17 +94,17 @@ while but == 1
     MAP(xval,yval) = -2;%Put on the closed list as well
 
     obstacle_size = 4;
-    obstacle_size_Perm = 3.5;
-    uknown_size = 6;
+    obstacle_size_Perm = 3;
+    unknown_size = 6;
     % Iterate over a range of indices around the obstacle center
-    for i = xval - floor(obstacle_size_Perm/2) : xval + floor(obstacle_size_Perm/2)
+    for io = xval - floor(obstacle_size_Perm/2) : xval + floor(obstacle_size_Perm/2)
         for j = yval - floor(obstacle_size_Perm/2) : yval + floor(obstacle_size_Perm/2)
             % Set the current index to be an obstacle
-            MAP(i,j) = -2;
+            MAP(io,j) = -2;
         end
     end
-
     plot(xvalOG, yvalOG, 'ro', 'MarkerSize', 20);
+    obstacles{obstacleNum} = [xvalOG, yvalOG]; 
 end
 
 x=r.get_poses();
@@ -94,16 +120,15 @@ xval=floor(xval);
 yval=floor(yval);
 xStart=xval;%Starting Position
 yStart=yval;%Starting Position
-MAP(xval,yval) = 1;
+%MAP(xval,yval) = 1;
 plot(xvalOG,yvalOG,'bo');
 xvalSTART = xval;
 yvalSTART = yval;
-
+probColl = 0;
 %End of obstacle-Target pickup
 
 %% ==============================================
 
-final_goal_points = [ 1.0450, 0; 0.4450, -0.5; 0.4696, 1];
 
 % We'll make the rotation error huge so that the initialization checker
 % doesn't care about it
@@ -137,21 +162,16 @@ start_time = tic; %The start time to compute time elapsed.
 arrowDir = [0.3; 0.4];
 
 for i = 1:N
-
     human = 0;
     % Initialize additional information plot here. Note the order of
     % plotting matters, objects that are plotted later will appear over
     % object plotted previously.
-    
     % Text for robot identification
-    if i == 1
-        robot_caption = sprintf('Robot %d', i);
-        human = 0;
+    if is_human(i)
+        robot_caption = sprintf('Human %d', i);
     else
-         robot_caption = sprintf('Human %d');
-         human = 1;
+        robot_caption = sprintf('Robot %d', i);
     end
-
     % Text with robot position information
     robot_details = sprintf('X-Pos: %d \nY-Pos: %d', x(1,i), x(2,i));
     % Text with goal identification
@@ -165,94 +185,115 @@ for i = 1:N
 
 % Get initial location data for while loop condition.
 
-rateHuman = 0.15;
-rateRobot = 0.3;
 iterations = 1000;
 test1 = 0;
 test2 = 0;
 prev_action = 0;
-Secondprev_action = 0;
-historicActions = zeros(1000, 1);
-prevXHUMAN = -1;
-prevYHUMAN = -1;
-prevPredictedCorrectly = -1;
-presentPredictedCorrectly = -1;
+historicActions = zeros(1000, numHumans);
+prevXHUMAN(numHumans) = -1;
+prevYHUMAN(numHumans) = -1;
+prevPredictedCorrectly(numHumans) = -1;
+presentPredictedCorrectly(numHumans) = -1;
 
 u = -1;
 xvalH = -1;
 yvalH = -1;
-xvalR = -1;
-yvalR = -1;
+xvalR(numRobots) = -1;
+yvalR(numRobots) = -1;
 Optimal_path=[];
-
+humans = 1:(N/2); 
+humanIterations(numHumans) = 0;
+for n= 1 : numHumans
+    humanIterations(n) = 0;
+    prevXHUMAN(n) = -1;
+    prevYHUMAN(n) = -1;
+    prevPredictedCorrectly(n) = -1;
+    presentPredictedCorrectly(n) = -1;
+    xvalR(n) = -1;
+    yvalR(n) = -1;
+end
+currentRobot =0;
 for i = 1:iterations
-
     %% Mimicking Human Movement
     %% test
-
-
     for q = 1:N
         x = r.get_poses();
-        % Robot Tags
-        set(a(1), 'Visible', 'off');
-        set(g(1), 'Visible', 'off');
-
 
         robot_labels{q}.Position = x(1:2, q) + [-0.15;0.15];
-        robot_details = sprintf('X-Pos: %0.2f \nY-Pos: %0.2f', x(1,q), x(2,q));
+        tempx = ((x(1,q) + 1.5) / 3) * 30 +1;
+        tempy = ((x(2,q) + 1) / 2) * 20 +1;
+        tempx = floor(tempx);
+        tempy = floor(tempy);
+        robot_details = sprintf('X-Pos: %0.2f \nY-Pos: %0.2f',tempx, tempy);
         robot_details_text{q}.String = robot_details;
         robot_details_text{q}.Position = x(1:2, q) - [0.2;0.25];
+        
+        if is_human(q) == 0
+                % Robot Tags
+                 currentRobot = q;
+                set(a(q), 'Visible', 'off');
+                set(g(q), 'Visible', 'off');
+                % Make Robot Coords
+                xvalR(currentRobot) = ((x(1,q) + 1.5) / 3) * 30 +1;
+                yvalR(currentRobot) = ((x(2,q) + 1) / 2) * 20 +1;
+                xvalR(currentRobot) = floor(xvalR(currentRobot));
+                yvalR(currentRobot) = floor(yvalR(currentRobot));
+        end
 
-        %% Make Robot Coords
-        xvalR = ((x(1,1) + 1.5) / 3) * 30 +1;
-        yvalR = ((x(2,1) + 1) / 2) * 20 +1;
-        xvalR = floor(xvalR);
-        yvalR = floor(yvalR);
-            
-        %% AKA IF CURRENT ROBOT IS HUMAN
-        if q == 2
-
-            %% GET Next Direction 
+        %% AKA IF CURRENT ROBOT IS HUMAN SPLIT INTO MORE
+        %% STAY HERE
+        if is_human(q) 
+            currentHuman = q - numRobots;
+            humanIterations(currentHuman) = humanIterations(currentHuman) + 1;
+            % GET Next Direction 
             isEqualPrediction = 0;
             % Assume a straigter path than taken
-            %% Ensures that if headed out of bounds, our direction is changed and corrected
-            u = actionTaken(x, prev_action, rateHuman);
+            % Ensures that if headed out of bounds, our direction is changed and corrected
+            if(humanIterations(currentHuman) <= 4)
+                u = actionTaken(x, -1, rateHuman(currentHuman));   
+            else 
+                u = actionTaken(x, historicActions((humanIterations(currentHuman) - 1), currentHuman), rateHuman(currentHuman));
+            end
             outofbounds = 0;
-            if x(1, 2) > 1.4 && (u == 1 || u == 7 || u == 8)
+            if x(1, q) > 1.4 && (u == 1 || u == 7 || u == 8)
                 outofbounds = 1;
             end
-            if x(1, 2) < -1.4 && (u == 3 || u == 4 || u == 5)
+            if x(1, q) < -1.4 && (u == 3 || u == 4 || u == 5)
                 outofbounds = 1;
             end
-            if x(2, 2) > 0.8 && (u == 1 || u == 2 || u == 3)
+            if x(2, q) > 0.8 && (u == 1 || u == 2 || u == 3)
                 outofbounds = 1;
             end
-            if x(2, 2) < -0.8 && (u == 5 || u == 6 || u == 7)
+            if x(2, q) < -0.8 && (u == 5 || u == 6 || u == 7)
                 outofbounds = 1;
             end
             while outofbounds == 1
-                u = actionTaken(x, prev_action, 0);
+                u = actionTaken(x, 0, 0);
                 outofbounds = 0;
-                if x(1, 2) > 1.4 && (u == 1 || u == 7 || u == 8)
+                if x(1, q) > 1.4 && (u == 1 || u == 7 || u == 8)
                     disp("HERE 1");
                     outofbounds = 1;
                 end
-                if x(1, 2) < -1.4 && (u == 3 || u == 4 || u == 5)
+                if x(1, q) < -1.4 && (u == 3 || u == 4 || u == 5)
                     disp("HERE 2");
                     outofbounds = 1;
                 end
-                if x(2, 2) > 0.8 && (u == 1 || u == 2 || u == 3)
+                if x(2, q) > 0.8 && (u == 1 || u == 2 || u == 3)
                     disp("HERE 3");
                     outofbounds = 1;
                 end
-                if x(2, 2) < -0.8 && (u == 5 || u == 6 || u == 7)
+                if x(2, q) < -0.8 && (u == 5 || u == 6 || u == 7)
                     disp("HERE 4");
                     outofbounds = 1;
                 end
             end
+            if (i <= numHumans)
+                upredicted = actionTaken(x, 0, rateRobot);
+            else 
+                upredicted = actionTaken(x, historicActions(humanIterations(currentHuman) - 1, currentHuman), rateRobot);
+            end
+            % THis now has more recent, from now on treat -1 as prev action
 
-            upredicted = actionTaken(x, prev_action, rateRobot);
-            historicActions(i) = u;
             % Update robot pose
             % 1: 45%(NE)
             % 2: 90%(N)
@@ -281,451 +322,483 @@ for i = 1:iterations
                 coordinatesTaken = [1.5,0];
             end
 
-        
-            %plot(x(1,2), x(2,2), 'ro', 'MarkerSize', 20);
-
-
             %% Notes for future eddie, It somewhat works but we probably 
             % need more than just a single prev action history to properly
             % connotate a predcited path, two might be enough but more
             % might be neccessary
 
-            if (i > 3)
-                if ((u == upredicted) && (u == prev_action) && (u == historicActions(i- 2))  && (u == historicActions(i - 3)))
-                    presentPredictedCorrectly = 1;
-                    set(a(2), 'Visible', 'on');                   
-                    set(g(2), 'Visible', 'off');
-                    set(a(2), 'Color', 'b');
+            if (i > (numHumans* 3))
+                if (u == upredicted) && (u ==  historicActions(humanIterations(currentHuman) - 1, currentHuman) && (u == historicActions((humanIterations(currentHuman) - 2), currentHuman))  && (u == historicActions((humanIterations(currentHuman) - 3), currentHuman)))
+                    presentPredictedCorrectly(currentHuman) = 1;
+                    set(a(q), 'Visible', 'on');                   
+                    set(g(q), 'Visible', 'off');
+                    set(a(q), 'Color', 'b');
 
-                    g(2).XData = x(1,2);
-                    g(2).YData = x(2,2);
-                    set(a(2), 'XData', x(1,2), 'YData',x(2,2), 'UData',  coordinatesTaken(1), 'VData', coordinatesTaken(2));
+                    g(q).XData = x(1,q);
+                    g(q).YData = x(2,q);
+                    set(a(q), 'XData', x(1,q), 'YData',x(2,q), 'UData',  coordinatesTaken(1), 'VData', coordinatesTaken(2));
                     isEqualPrediction = 1;
                     test1 = test1 + 1;
 
                 elseif (abs(u - upredicted) == 1  ) ||(abs(u - upredicted) ==   7) 
-                    presentPredictedCorrectly = 1;
-                    set(a(2), 'Visible', 'on');                   
-                    set(g(2), 'Visible', 'off');
-                    set(a(2), 'Color', 'y');
+                    presentPredictedCorrectly(currentHuman) = 1;
+                    set(a(q), 'Visible', 'on');                   
+                    set(g(q), 'Visible', 'off');
+                    set(a(q), 'Color', 'y');
 
-                    g(2).XData = x(1,2);
-                    g(2).YData = x(2,2);
-                    set(a(2), 'XData', x(1,2), 'YData',x(2,2), 'UData',  coordinatesTaken(1), 'VData', coordinatesTaken(2));
+                    g(q).XData = x(1,q);
+                    g(q).YData = x(2,q);
+                    set(a(2), 'XData', x(1,q), 'YData',x(2,q), 'UData',  coordinatesTaken(1), 'VData', coordinatesTaken(2));
                     isEqualPrediction = 1;
                     test1 = test1 + 1;
 
                 else
-                    set(a(2), 'Visible', 'off');
-                    set(g(2), 'Visible', 'on');
-                    presentPredictedCorrectly = 0;
+                    set(a(q), 'Visible', 'off');
+                    set(g(q), 'Visible', 'on');
+                    presentPredictedCorrectly(currentHuman) = 0;
                     isEqualPrediction = 0;
                     test2 = test2 + 1;                
-                end
-    
-                if ((u == upredicted) && u == prev_action)
-                    Secondprev_action = prev_action;
                 end
             end
 
             %% Make Human obstacles
-            xvalH = ((x(1,2) + 1.5) / 3) * 30 +1;
-            yvalH = ((x(2,2) + 1) / 2) * 20 +1;
+            xvalH = ((x(1,q) + 1.5) / 3) * 30 +1;
+            yvalH = ((x(2,q) + 1) / 2) * 20 +1;
             xvalH = floor(xvalH);
             yvalH = floor(yvalH);
-            % Remove previous human obstacles
-            
 
-            if prevXHUMAN ~= -1 && prevYHUMAN ~= -1 %% shape specify
-                if prevPredictedCorrectly == 0
-                    MAP(prevXHUMAN,prevYHUMAN) = 0;
-                    % Iterate over a range of indices around the obstacle center
-                    for s = prevXHUMAN - floor(uknown_size/2) : prevXHUMAN + floor(uknown_size/2)
-                        for j = prevYHUMAN - floor(uknown_size/2) : prevYHUMAN + floor(uknown_size/2)
+            % Remove previous human obstacles
+            if prevXHUMAN(currentHuman) ~= -1 && prevYHUMAN(currentHuman) ~= -1 %% shape specify
+                if prevPredictedCorrectly(currentHuman) == 0    
+                   for s = xvalH - floor(4/2) : xvalH + floor(4/2)
+                        for j = yvalH - floor(4/2) : yvalH + floor(4/2)
                             % Set the current index to be an obstacle
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
                                 MAP(s,j) = 0;
                             end
                         end
                     end
-                elseif prevPredictedCorrectly == 1
                     % Put on the closed list as well
-                    MAP(prevXHUMAN,prevYHUMAN) = 0;
-
+                    % Iterate over a range of indices around the obstacle center
+                    for s = prevXHUMAN(currentHuman) - floor(unknown_size/2) : prevXHUMAN(currentHuman) + floor(unknown_size/2)
+                        for j = prevYHUMAN(currentHuman) - floor(unknown_size/2) : prevYHUMAN(currentHuman) + floor(unknown_size/2)
+                            % Set the current index to be an obstacle
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
+                                MAP(s,j) = 0;
+                            end
+                        end
+                    end
+                elseif prevPredictedCorrectly(currentHuman) == 1
+                    % Put on the closed list as well
+                    for s = prevXHUMAN(currentHuman) - floor(2/2) : prevXHUMAN(currentHuman) + floor(2/2)
+                        for j = prevYHUMAN(currentHuman) - floor(2/2) : prevYHUMAN(currentHuman) + floor(2/2)
+                            % Set the current index to be an obstacle
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                                MAP(s,j) = 0;
+                            end
+                        end
+                    end
                     %% You can ask about this edges are not well made
-                    if (prev_action == 1) %NE
-                        temp = 0;
-                        for (p = 1: 3)
-                            xz= -obstacle_size;
-                            for y = obstacle_size : -obstacle_size
-                                s = prevXHUMAN + xz + temp;
-                                j = prevYHUMAN + y;
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                    MAP(s, j) = 0;
-                                end
-                                xz = xz + 1;
-                            end 
-                            temp = temp + 1;
-                        end
-                    elseif prev_action == 2 %N
-                        for s = prevXHUMAN - floor(obstacle_size/2) : prevXHUMAN + floor(obstacle_size/2)
-                            for j = prevYHUMAN : prevYHUMAN + floor(obstacle_size/2)
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                    MAP(s,j) = 0;
-                                end
-                            end
-                        end
-                    elseif prev_action == 3 %NW
-                        temp = 0;
-                        for (p = 1: 3)
-                            xz= obstacle_size;
-                            for y = obstacle_size : -obstacle_size
-                                s = prevXHUMAN + xz - temp;
-                                j = prevYHUMAN + y;
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                    MAP(s, j) = 0;
-                                end
-                                xz = xz - 1;
-                            end 
-                            temp = temp + 1;
-                        end
-                    elseif prev_action == 4 %W
-                         for s = prevXHUMAN - floor(obstacle_size/2) : prevXHUMAN
-                            for j = prevYHUMAN - floor(obstacle_size/2) : prevYHUMAN + floor(obstacle_size/2)
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                    MAP(s,j) = 0;
-                                end
-                            end
-                        end
-                    elseif prev_action == 5 %SW
-                        temp = 0;
-                        for (p = 1: 3)
-                            xz = obstacle_size;
-                            for y = -obstacle_size : obstacle_size
-                                s = prevXHUMAN + xz - temp;
-                                j = prevYHUMAN + y;
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                    MAP(s, j) = 0;
+                    if historicActions(humanIterations(currentHuman) - 1, currentHuman) == 1 %NE
+                        for p = 0: obstacle_size- 1
+                            for y = 0 : obstacle_size- 1
+                                s = prevXHUMAN(currentHuman) + p;
+                                j = prevYHUMAN(currentHuman) + y;
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
+                                        MAP(s, j) = 0;
                                 end                            
-                                xz = xz - 1;
                             end 
-                            temp = temp + 1;
                         end
-                    elseif prev_action == 6 %S
-                        for s = prevXHUMAN - floor(obstacle_size/2) : prevXHUMAN + floor(obstacle_size/2)
-                            for j = prevYHUMAN - floor(obstacle_size/2) : prevYHUMAN 
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                    elseif historicActions(humanIterations(currentHuman) - 1, currentHuman) == 2 %N
+                        for s = prevXHUMAN(currentHuman) - floor(obstacle_size/2) : prevXHUMAN(currentHuman) + floor(obstacle_size/2)
+                            for j = prevYHUMAN(currentHuman) : prevYHUMAN(currentHuman) + floor(obstacle_size/2)
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
                                     MAP(s,j) = 0;
                                 end
                             end
                         end
-                    elseif prev_action == 7 %SE
-                        temp = 0;
-                        for (p = 1: 3)
-                            xz= -obstacle_size;
-                            for y = -obstacle_size : obstacle_size
-                                s = prevXHUMAN + xz + temp;
-                                j = prevYHUMAN + y;
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                    MAP(s, j) = 0;
-                                end
-                                xz = xz + 1;
+                    elseif historicActions(humanIterations(currentHuman) - 1, currentHuman) == 3 %NW
+                        for p = 0: obstacle_size- 1
+                            for y = 0 : obstacle_size- 1
+                                s = prevXHUMAN(currentHuman) - p;
+                                j = prevYHUMAN(currentHuman) + y;
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
+                                        MAP(s, j) = 0;
+                                end                            
                             end 
-                            temp = temp + 1;
                         end
-                    elseif prev_action == 8 %E
-                        for s = prevXHUMAN : prevXHUMAN+ floor(obstacle_size/2)
-                            for j = prevYHUMAN - floor(obstacle_size/2) : prevYHUMAN + floor(obstacle_size/2)
-                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                    elseif historicActions(humanIterations(currentHuman) - 1, currentHuman) == 4 %W
+                         for s = prevXHUMAN - floor(obstacle_size/2) : prevXHUMAN
+                            for j = prevYHUMAN(currentHuman) - floor(obstacle_size/2) : prevYHUMAN(currentHuman) + floor(obstacle_size/2)
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
+                                    MAP(s,j) = 0;
+                                end
+                            end
+                        end
+                    elseif historicActions(humanIterations(currentHuman) - 1, currentHuman) == 5 %SW
+                        for p = 0: obstacle_size- 1
+                            for y = 0 : obstacle_size- 1
+                                s = prevXHUMAN(currentHuman) - p;
+                                j = prevYHUMAN(currentHuman) - y;
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
+                                        MAP(s, j) = 0;
+                                end                            
+                            end 
+                        end
+                    elseif historicActions(humanIterations(currentHuman) - 1, currentHuman) == 6 %S
+                        for s = prevXHUMAN(currentHuman) - floor(obstacle_size/2) : prevXHUMAN(currentHuman) + floor(obstacle_size/2)
+                            for j = prevYHUMAN(currentHuman) - floor(obstacle_size/2) : prevYHUMAN(currentHuman)
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
+                                    MAP(s,j) = 0;
+                                end
+                            end
+                        end
+                    elseif historicActions(humanIterations(currentHuman) - 1, currentHuman) == 7 %SE
+                        for p = 0: obstacle_size - 1
+                            for y = 0 : obstacle_size - 1
+                                s = prevXHUMAN(currentHuman) + p;
+                                j = prevYHUMAN(currentHuman) - y;
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
+                                        MAP(s, j) = 0;
+                                end                            
+                            end 
+                        end
+                    elseif historicActions(humanIterations(currentHuman) - 1, currentHuman) == 8 %E
+                        for s = prevXHUMAN(currentHuman) : prevXHUMAN(currentHuman) + floor(obstacle_size/2)
+                            for j = prevYHUMAN(currentHuman) - floor(obstacle_size/2) : prevYHUMAN(currentHuman) + floor(obstacle_size/2)
+                                if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && MAP(s,j) ~= 0)
                                     MAP(s,j) = 0;
                                 end
                             end
                         end
                     end
-                end   
+                end
             end
-%%should not be prev
-            if presentPredictedCorrectly == 0    
-                MAP(xvalH,yvalH) = -1;
+
+
+            %%should not be prev
+            if presentPredictedCorrectly(currentHuman) == 0    
                 % Put on the closed list as well
                 % Iterate over a range of indices around the obstacle center
-                for s = xvalH - floor(uknown_size/2) : xvalH + floor(uknown_size/2)
-                    for j = yvalH - floor(uknown_size/2) : yvalH + floor(uknown_size/2)
+                for s = xvalH - floor(unknown_size/2) : xvalH + floor(unknown_size/2)
+                    for j = yvalH - floor(unknown_size/2) : yvalH + floor(unknown_size/2)
                         % Set the current index to be an obstacle
-                        if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                        if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
                             MAP(s,j) = -1;
                         end
                     end
                 end
-            elseif presentPredictedCorrectly == 1
+                for s = xvalH - floor(4/2) : xvalH + floor(4/2)
+                    for j = yvalH - floor(4/2) : yvalH + floor(4/2)
+                        % Set the current index to be an obstacle
+                        if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                            MAP(s,j) = -3;
+                        end
+                    end
+                end
+                if (xvalH >= 1 && xvalH <= 30 && yvalH >= 1 && yvalH <=20 && MAP(xvalH,yvalH) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                  MAP(xvalH,yvalH) = -4;
+                end
+            elseif presentPredictedCorrectly(currentHuman) == 1
                 % Put on the closed list as well
-                MAP(xvalH,yvalH) = -1;
-                %% You can ask about this edges are not well made
                 if (u == 1) %NE
-                    temp = 0;
-                    for (p = 1: 3)
-                        xz= -obstacle_size;
-                        for y = obstacle_size : -obstacle_size
-                            s = xvalH + xz + temp;
+                    for p = 0: obstacle_size- 1
+                        for y = 0 : obstacle_size- 1
+                            s = xvalH + p;
                             j = yvalH + y;
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                MAP(s, j) = -1;
-                            end
-                            xz = xz + 1;
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                                    MAP(s, j) = -1;
+                            end                            
                         end 
-                        temp = temp + 1;
                     end
                 elseif u == 2 %N
                     for s = xvalH - floor(obstacle_size/2) : xvalH + floor(obstacle_size/2)
                         for j = yvalH : yvalH + floor(obstacle_size/2)
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
                                 MAP(s,j) = -1;
                             end
                         end
                     end
                 elseif u == 3 %NW
-                    temp = 0;
-                    for (p = 1: 3)
-                        xz= obstacle_size;
-                        for y = obstacle_size : -obstacle_size
-                            s = xvalH + xz - temp;
+                    for p = 0: obstacle_size- 1
+                        for y = 0 : obstacle_size- 1
+                            s = xvalH - p;
                             j = yvalH + y;
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                MAP(s, j) = -1;
-                            end
-                            xz = xz - 1;
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                                    MAP(s, j) = -1;
+                            end                            
                         end 
-                        temp = temp + 1;
                     end
                 elseif u == 4 %W
                      for s = xvalH - floor(obstacle_size/2) : xvalH
                         for j = yvalH - floor(obstacle_size/2) : yvalH + floor(obstacle_size/2)
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
                                 MAP(s,j) = -1;
                             end
                         end
                     end
                 elseif u == 5 %SW
-                    temp = 0;
-                    for (p = 1: 3)
-                        xz= obstacle_size;
-                        for y = -obstacle_size : obstacle_size
-                            s = xvalH + xz - temp;
-                            j = yvalH + y;
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                    MAP(s, j) = -1;
+                    for p = 0: obstacle_size- 1
+                        for y = 0 : obstacle_size- 1
+                            s = xvalH - p;
+                            j = yvalH - y;
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                                    MAP(s, j) = -1;                                     
                             end                            
-                            xz = xz - 1;
                         end 
-                        temp = temp + 1;
                     end
                 elseif u == 6 %S
                     for s = xvalH - floor(obstacle_size/2) : xvalH + floor(obstacle_size/2)
                         for j = yvalH - floor(obstacle_size/2) : yvalH 
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
                                 MAP(s,j) = -1;
                             end
                         end
                     end
                 elseif u == 7 %SE
-                    temp = 0;
-                    for (p = 1: 3)
-                        xz= -obstacle_size;
-                        for y = -obstacle_size : obstacle_size
-                            s = xvalH + xz + temp;
-                            j = yvalH + y;
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
-                                MAP(s, j) = -1;
-                            end
-                            xz = xz + 1;
+                    for p = 0: obstacle_size - 1
+                        for y = 0 : obstacle_size - 1
+                            s = xvalH + p;
+                            j = yvalH - y;
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                                    MAP(s, j) = -1;
+                            end                            
                         end 
-                        temp = temp + 1;
                     end
                 elseif u == 8 %E
                     for s = xvalH : xvalH+ floor(obstacle_size/2)
                         for j = yvalH - floor(obstacle_size/2) : yvalH + floor(obstacle_size/2)
-                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2)
+                            if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
                                 MAP(s,j) = -1;
                             end
                         end
                     end
                 end
+                if (xvalH >= 1 && xvalH <= 30 && yvalH >= 1 && yvalH <=20 && MAP(xvalH,yvalH) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                  MAP(xvalH,yvalH) = -4;
+                end
+                %% You can ask about this edges are not well made
+                for s = xvalH - floor(2/2) : xvalH + floor(2/2)
+                    for j = yvalH - floor(2/2) : yvalH + floor(2/2)
+                        % Set the current index to be an obstacle
+                        if (s >= 1 && s <= 30 && j >= 1 && j <=20 && MAP(s,j) ~= -2 && ~ismember([s, j], [xvalR', yvalR'], 'rows'))
+                            MAP(s,j) = -3;
+                        end
+                    end
+                end
             end
-             
-            end
-        
             %% Only update prev action until after everuthing
             prev_action = u;
-            prevPredictedCorrectly = presentPredictedCorrectly;
-            prevXHUMAN = xvalH;
-            prevYHUMAN = yvalH;
-            dx = [cos(u*pi/4), sin(u*pi/4)];
-          %  x(1, 2) = x(1, 2) + dx(:, 1);
-          %  x(2, 2) = x(2, 2) + dx(:, 2);
-            %% Reset goal coordinates to location then to direction where we will move 
-           
-            final_goal_points(1:2, 2) = x(1:2, 2);
+            historicActions(humanIterations(currentHuman), currentHuman) = u;
 
-            final_goal_points(1, 2) = final_goal_points(1, 2) + dx(:, 1);
-            final_goal_points(2, 2) = final_goal_points(2, 2) + dx(:, 2);
+            prevPredictedCorrectly(currentHuman) = presentPredictedCorrectly(currentHuman);
+            prevXHUMAN(currentHuman) = xvalH;
+            prevYHUMAN(currentHuman) = yvalH;
+            dx = [cos(u*pi/4), sin(u*pi/4)];
+            %% Reset goal coordinates to location then to direction where we will move 
+
+            final_goal_points(1:2, q) = x(1:2, q);
+
+            final_goal_points(1, q) = final_goal_points(1, q) + dx(:, 1);
+            final_goal_points(2, q) = final_goal_points(2, q) + dx(:, 2);
 
             % try to slow down human
-            final_goal_points(1:2, 2) = final_goal_points(1:2, 2)/1;
+            final_goal_points(1:2, q) = final_goal_points(1:2, q);
    
 
-%% =======================================================
-    % Path PLanning
+            %% End of Human =======================================================
+        end
+
+    %% Path PLanning
+    % First mod just to slow down calculate/TEB
+
+    if(mod(i, 4) == 0 )
+        %Current Robot position
+        for irt = 1:length(xvalR)
+            xval1 = xvalR(irt);
+            yval1 = yvalR(irt);
+            MAP(xval1, yval1) = -10; % Set the current point to -10
+            obstacle_size = 3; % Define the size of the surrounding area to be set to -10
+            for s = xval1 - floor(2/2) : xval1 + floor(2/2)
+                for j = yval1 - floor(2/2) : yval1 + floor(2/2)
+                    if  s >= 1 && s <= 30 && j >= 1 && j <= 20 && MAP(s, j) ~= -2
+                        MAP(s,j) = -7;
+                        if (s == xval1 && yval1 == j)
+                            MAP(s,j) = -10;
+                        end
+                    end
+                end
+            end 
+        end
+
+
+    if(is_human(q) == 0)
+        xvalOG = x(1, q);
+        yvalOG = x(2, q);
+        %% DOnt know about the +1
+        xval = ((xvalOG + 1.5) / 3) * 30 + 1;
+        yval = ((yvalOG + 1) / 2) * 20 + 1;
+        xval=floor(xval);
+        yval=floor(yval);
+        xStart=xval;%Starting Position
+        yStart=yval;%Starting Position
 
 
 
-    if(mod(i, 6) == 0 )
-        xvalOG = x(1, 1);
-    yvalOG = x(2, 1);
-    %% DOnt know about the +1
-    xval = ((xvalOG + 1.5) / 3) * 30 + 1;
-    yval = ((yvalOG + 1) / 2) * 20 + 1;
-    xval=floor(xval);
-    yval=floor(yval);
-    xStart=xval;%Starting Position
-    yStart=yval;%Starting Position
-    MAP(xval,yval) = 1;
-    plot(xvalOG,yvalOG,'bo');
-    xvalSTART = xval;
-    yvalSTART = yval;
-
-    OPEN=[];
-    CLOSED=[];
-    k=1;%Dummy counter
-    for i=1:MAX_X
-        for j=1:MAX_Y
-            if(MAP(i,j) == -2)
-                CLOSED(k,1)=i; 
-                CLOSED(k,2)=j; 
-                k=k+1;
-            elseif (MAP(i,j) == -1)
-                %% EDDIE COME BACK RISK MANAGMENT
-                probColl = calc_prob_collision(xvalR, yvalR, i,j, MAP);
-                if probColl > 0.20
-                    disp("RISKY");
-                    CLOSED(k,1)=i; 
+        plot(xvalOG,yvalOG,'bo');
+        xvalSTART = xval;
+        yvalSTART = yval;
+    
+        OPEN=[];
+        CLOSED=[];
+        k=1;%Dummy counter
+        for in=1:MAX_X
+            for j=1:MAX_Y
+                if(MAP(in,j) == -2)
+                    CLOSED(k,1)=in; 
                     CLOSED(k,2)=j; 
                     k=k+1;
+                % We accept -1 as passable (so robots dont get stuck in a humans 
+                % expansive territory
+                % but in doing -1 in calculations
+                % surrounding area is higher priority to avoid
+                elseif (MAP(in,j) < 0 && MAP(in,j) ~= -1 && MAP(in,j) ~= -7)
+                    %% EDDIE's RISK MANAGMENT
+                    probColl = calc_prob_collision(xvalR(currentRobot), yvalR(currentRobot), in,j, MAP);
+                    if probColl > 0.15
+                        disp("RISKY");
+                     %   disp(probColl);
+                        CLOSED(k,1)=in; 
+                        CLOSED(k,2)=j; 
+                        k=k+1;
+                    end
                 end
-
             end
         end
-    end
-    CLOSED_COUNT=size(CLOSED,1);
-    %set the starting node as the first node
-    
-    xNode=xvalSTART;
-    yNode=yvalSTART;
-    
-    OPEN_COUNT=1;
-    path_cost=0;
-    goal_distance=distance(xNode,yNode,xTarget,yTarget);
-    OPEN(OPEN_COUNT,:)=insert_open(xNode,yNode,xNode,yNode,path_cost,goal_distance,goal_distance);
-    OPEN(OPEN_COUNT,1)=0;
-    CLOSED_COUNT=CLOSED_COUNT+1;
-    CLOSED(CLOSED_COUNT,1)=xNode;
-    CLOSED(CLOSED_COUNT,2)=yNode;
-    NoPath=1;
-    % START ALGORITHM
-    while((xNode ~= xTarget || yNode ~= yTarget) && NoPath == 1)
-    %  plot(xNode+.5,yNode+.5,'go');
-    exp_array=expand_array(xNode,yNode,path_cost,xTarget,yTarget,CLOSED,MAX_X,MAX_Y);
-    exp_count=size(exp_array,1);
-    for i=1:exp_count
-        flag=0;
-        for j=1:OPEN_COUNT
-            if(exp_array(i,1) == OPEN(j,2) && exp_array(i,2) == OPEN(j,3) )
-                OPEN(j,8)=min(OPEN(j,8),exp_array(i,5)); %#ok<*SAGROW>
-                if OPEN(j,8)== exp_array(i,5)
-                    %UPDATE PARENTS,gn,hn
-                    OPEN(j,4)=xNode;
-                    OPEN(j,5)=yNode;
-                    OPEN(j,6)=exp_array(i,3);
-                    OPEN(j,7)=exp_array(i,4);
-                end%End of minimum fn check
-                flag=1;
-            end%End of node check
-    %         if flag == 1
-    %             break;
-        end%End of j for
-        if flag == 0
-            OPEN_COUNT = OPEN_COUNT+1;
-            OPEN(OPEN_COUNT,:)=insert_open(exp_array(i,1),exp_array(i,2),xNode,yNode,exp_array(i,3),exp_array(i,4),exp_array(i,5));
-        end%End of insert new element into the OPEN list
-    end
-    index_min_node = min_fn(OPEN,OPEN_COUNT,xTarget,yTarget);
-    if (index_min_node ~= -1 && index_min_node ~= -2)    
-       %Set xNode and yNode to the node with minimum fn
-        xNode=OPEN(index_min_node,2);
-        yNode=OPEN(index_min_node,3);
-        path_cost=OPEN(index_min_node,6);%Update the cost of reaching the parent node
-      %Move the Node to list CLOSED
-      CLOSED_COUNT=CLOSED_COUNT+1;
-      CLOSED(CLOSED_COUNT,1)=xNode;
-      CLOSED(CLOSED_COUNT,2)=yNode;
-      OPEN(index_min_node,1)=0;
-      else
-          %No path exists to the Target!!
-          NoPath=0;%Exits the loop!
-      end%End of index_min_node check
-    end%End of While Loop
-    
-    i=size(CLOSED,1);
-    Optimal_path=[];
-    xval=CLOSED(i,1);
-    yval=CLOSED(i,2);
-    i=1;
-    Optimal_path(i,1)=xval;
-    Optimal_path(i,2)=yval;
-    i=i+1;
-    
-    if ( (xval == xTarget) && (yval == yTarget))
-        inode=0;
-       %Traverse OPEN and determine the parent nodes
-       parent_x=OPEN(node_index(OPEN,xval,yval),4);%node_index returns the index of the node
-       parent_y=OPEN(node_index(OPEN,xval,yval),5);
-       
-    while( parent_x ~= xStart || parent_y ~= yStart)
-           Optimal_path(i,1) = parent_x;
-           Optimal_path(i,2) = parent_y;
-           %Get the grandparents:-)
-           inode=node_index(OPEN,parent_x,parent_y);
-           parent_x=OPEN(inode,4);%node_index returns the index of the node
-           parent_y=OPEN(inode,5);
-           i=i+1;
-    end
-    
-    j=size(Optimal_path,1);
-    %Plot the Optimal Path!
-    Optimal_path(j,1) = (Optimal_path(j,1) / 10) - 1.5; 
-    Optimal_path(j,2) = (Optimal_path(j,2) / 10) - 1;
-    
-    p=plot(Optimal_path(j,1),Optimal_path(j,2),'bo');
-    j=j-1;
-    
-    for i=j:-1:1
-      %pause(.05);
-      Optimal_path(i,1) = (Optimal_path(i,1) / 10) - 1.5;
-      Optimal_path(i,2) = (Optimal_path(i,2) / 10) - 1;
-      set(p,'XData',Optimal_path(i,1),'YData',Optimal_path(i,2));
-
-    end
-    plot(Optimal_path(:,1),Optimal_path(:,2));
-    else
-     disp("No path yet)");
-    end
-end
-[max_row, max_col] = size(Optimal_path);
-if (max_row>1)
-    final_goal_points(1, 1) = Optimal_path((max_row - 1),1);
-    final_goal_points(2, 1) = Optimal_path((max_row - 1),2);
-end
-%% ===========================================================================
+        CLOSED_COUNT=size(CLOSED,1);
+        %set the starting node as the first node
+        xNode=xvalSTART;
+        yNode=yvalSTART;
         
+        OPEN_COUNT=1;
+        path_cost=0;
+        goal_distance=distance(xNode,yNode,xTarget(currentRobot),yTarget(currentRobot));
+        OPEN(OPEN_COUNT,:)=insert_open(xNode,yNode,xNode,yNode,path_cost,goal_distance,goal_distance);
+        OPEN(OPEN_COUNT,1)=0;
+        CLOSED_COUNT=CLOSED_COUNT+1;
+        CLOSED(CLOSED_COUNT,1)=xNode;
+        CLOSED(CLOSED_COUNT,2)=yNode;
+        NoPath=1;
+        % START ALGORITHM
+        while((xNode ~= xTarget(currentRobot) || yNode ~= yTarget(currentRobot)) && NoPath == 1)
+        %  plot(xNode+.5,yNode+.5,'go');
+        exp_array=expand_array(xNode,yNode,path_cost,xTarget(currentRobot),yTarget(currentRobot),CLOSED,MAX_X,MAX_Y);
+        exp_count=size(exp_array,1);
+        for ie=1:exp_count
+            flag=0;
+            for j=1:OPEN_COUNT
+                if(exp_array(ie,1) == OPEN(j,2) && exp_array(ie,2) == OPEN(j,3) )
+                    OPEN(j,8)=min(OPEN(j,8),exp_array(ie,5)); %#ok<*SAGROW>
+                    if OPEN(j,8)== exp_array(ie,5)
+                        %UPDATE PARENTS,gn,hn
+                        OPEN(j,4)=xNode;
+                        OPEN(j,5)=yNode;
+                        OPEN(j,6)=exp_array(ie,3);
+                        OPEN(j,7)=exp_array(ie,4);
+                    end%End of minimum fn check
+                    flag=1;
+                end%End of node check
+        %         if flag == 1
+        %             break;
+            end%End of j for
+            if flag == 0
+                OPEN_COUNT = OPEN_COUNT+1;
+                OPEN(OPEN_COUNT,:)=insert_open(exp_array(ie,1),exp_array(ie,2),xNode,yNode,exp_array(ie,3),exp_array(ie,4),exp_array(ie,5));
+            end%End of insert new element into the OPEN list
+        end
+        index_min_node = min_fn(OPEN,OPEN_COUNT,xTarget(currentRobot),yTarget(currentRobot));
+        if (index_min_node ~= -1 && index_min_node ~= -2)    
+           %Set xNode and yNode to the node with minimum fn
+            xNode=OPEN(index_min_node,2);
+            yNode=OPEN(index_min_node,3);
+            path_cost=OPEN(index_min_node,6);%Update the cost of reaching the parent node
+          %Move the Node to list CLOSED
+          CLOSED_COUNT=CLOSED_COUNT+1;
+          CLOSED(CLOSED_COUNT,1)=xNode;
+          CLOSED(CLOSED_COUNT,2)=yNode;
+          OPEN(index_min_node,1)=0;
+          else
+              %No path exists to the Target!!
+              NoPath=0;%Exits the loop!
+          end%End of index_min_node check
+        end%End of While Loop
+        
+        ie=size(CLOSED,1);
+        Optimal_path=[];
+        xval=CLOSED(ie,1);
+        yval=CLOSED(ie,2);
+        ie=1;
+        Optimal_path(ie,1)=xval;
+        Optimal_path(ie,2)=yval;
+        ie=ie+1;
+        
+        if ( (xval == xTarget(currentRobot)) && (yval == yTarget(currentRobot)))
+            inode=0;
+           %Traverse OPEN and determine the parent nodes
+           parent_x=OPEN(node_index(OPEN,xval,yval),4);%node_index returns the index of the node
+           parent_y=OPEN(node_index(OPEN,xval,yval),5);
+           
+        while( parent_x ~= xStart || parent_y ~= yStart)
+               Optimal_path(ie,1) = parent_x;
+               Optimal_path(ie,2) = parent_y;
+               %Get the grandparents:-)
+               inode=node_index(OPEN,parent_x,parent_y);
+               parent_x=OPEN(inode,4);%node_index returns the index of the node
+               parent_y=OPEN(inode,5);
+               ie=ie+1;
+        end
+        
+        j=size(Optimal_path,1);
+        %Plot the Optimal Path!
+        Optimal_path(j,1) = (Optimal_path(j,1) / 10) - 1.5; 
+        Optimal_path(j,2) = (Optimal_path(j,2) / 10) - 1;
+        
+        p=plot(Optimal_path(j,1),Optimal_path(j,2),'bo');
+        j=j-1;
+        
+        for ih=j:-1:1
+          %pause(.05);
+          Optimal_path(ih,1) = (Optimal_path(ih,1) / 10) - 1.5;
+          Optimal_path(ih,2) = (Optimal_path(ih,2) / 10) - 1;
+          set(p,'XData',Optimal_path(ih,1),'YData',Optimal_path(ih,2));
+        end
+        plot(Optimal_path(:,1),Optimal_path(:,2));
+        else
+            disp("No path yet)");
+            final_goal_points(1:2, q) = x(1:2, q);
+        end
+        [max_row, max_col] = size(Optimal_path);
+        if (max_row>1)
+            final_goal_points(1, q) = Optimal_path((max_row - 1),1);
+            final_goal_points(2, q) = Optimal_path((max_row - 1),2);
+        end
+    end
+        for irt = 1:length(xvalR)
+            xval1 = xvalR(irt);
+            yval1 = yvalR(irt);
+            MAP(xval1, yval1) = -10; % Set the current point to -10
+            obstacle_size = 3; % Define the size of the surrounding area to be set to -10
+            for s = xval1 - floor(2/2) : xval1 + floor(2/2)
+                for j = yval1 - floor(2/2) : yval1 + floor(2/2)
+                    if  s >= 1 && s <= 30 && j >= 1 && j <= 20 && MAP(s, j) ~= -2
+                        MAP(s,j) = 0;
+                    end
+                end
+            end 
+        end
+    end
+
+% ===========================================================================
         dxi = controller(x(1:2, :), final_goal_points(1:2, :)) ;
 
         dxi = si_barrier_certificate(dxi, x(1:2, :));    
@@ -746,11 +819,11 @@ r.debug();
 function dX = actionTaken(x, prev_action, rate)
             beta_i = 0.5;           % inverse temperature parameter
             theta_i = randn(8,1);   % parameter vector for reward function
-            xt = [x(2,1); x(2,2)]; % current robot position
-
+           % xt = [x(2,1); x(2,2)]; % current robot position pretty sure
+           % its useless
+              xt = 0;
             % Define reward function
             if prev_action == 0 || prev_action == -1
-                disp(")0000000000000000000000000000000");
                 riz = @(xt, utx, theta) theta(utx); % example reward function
                 % Define Boltzmann distribution function
                 Qi = @(xt, utx) riz(xt, utx, theta_i);      
@@ -784,57 +857,51 @@ end
 %% Path planning ======================================================================
 
 function prob_coll = calc_prob_collision(robotX, robotY, humanX, humanY, MAP)
-% robot_state: planned state of the robot at time tau
-% human_states: cell array containing the states of all humans at time tau
+    % robot_state: planned state of the robot at time tau
+    % human_states: cell array containing the states of all humans at time tau
+    % We define TEB as 1 unit around robot
+    OOB = -3;
+    % if 1 then too high, if 2 then too low
+    outOfBoundsX = 0;
+    outOfBoundsY = 0;
+    overlap = 0;
+    
+    if humanX == 30 
+        outOfBoundsX = 1;
+    elseif humanX == 1
+        outOfBoundsX = 2;
+    end
+    
+    if humanY == 20 
+        outOfBoundsY = 1;
+    elseif humanY == 1
+        outOfBoundsY = 2;
+    end
 
-% We define TEB as 1 unit around robot
-OOB = -3;
-% if 1 then too high, if 2 then too low
-outOfBoundsX = 0;
-outOfBoundsY = 0;
-overlap = 0;
-
-if humanX == 30 
-    outOfBoundsX = 1;
-elseif humanX == 1
-    outOfBoundsX = 2;
-end
-
-if humanY == 20 
-    outOfBoundsY = 1;
-elseif humanY == 1
-    outOfBoundsY = 2;
-end
-
-if    (outOfBoundsX == 0 && outOfBoundsY == 0)
-        overlap = MAP(humanX + 1, humanY + 1) + MAP(humanX - 1, humanY - 1) + MAP(humanX - 1, humanY + 1) + MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY + 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY) + MAP(humanX - 1, humanY);
-elseif(outOfBoundsX == 0 && outOfBoundsY == 1)
-        overlap = OOB + MAP(humanX - 1, humanY - 1) + MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY) + MAP(humanX - 1, humanY);
-elseif(outOfBoundsX == 0 && outOfBoundsY == 2)
-        overlap = OOB + MAP(humanX + 1, humanY + 1) + MAP(humanX - 1, humanY + 1)  + MAP(humanX, humanY + 1) + MAP(humanX + 1, humanY) + MAP(humanX - 1, humanY);
-elseif(outOfBoundsX == 1 && outOfBoundsY == 0)
-        overlap = OOB + MAP(humanX - 1, humanY - 1) + MAP(humanX - 1, humanY + 1)  + MAP(humanX, humanY + 1) + MAP(humanX, humanY - 1) + MAP(humanX - 1, humanY);
-elseif(outOfBoundsX == 1 && outOfBoundsY == 1)
-        overlap =  OOB - 2 + MAP(humanX - 1, humanY - 1)  + MAP(humanX, humanY - 1) + MAP(humanX - 1, humanY);
-elseif(outOfBoundsX == 1 && outOfBoundsY == 2)
-        overlap = OOB -2 +  MAP(humanX - 1, humanY + 1)  + MAP(humanX, humanY + 1)  + MAP(humanX - 1, humanY);
-elseif(outOfBoundsX == 2 && outOfBoundsY == 0)
-        overlap = OOB + MAP(humanX + 1, humanY + 1)  + MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY + 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY);
-elseif(outOfBoundsX == 2 && outOfBoundsY == 1)
-         overlap = OOB -2 +  MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY);
-elseif(outOfBoundsX == 2 && outOfBoundsY == 2)
-         overlap = OOB - 2 + MAP(humanX + 1, humanY + 1)   + MAP(humanX, humanY + 1) + MAP(humanX + 1, humanY) ;
-end
-
-
-
-overlap = overlap / 8;
-overlap = -overlap;
-
-distanceFrom = distance(robotX,robotY,humanX, humanY);
-
-prob_coll = overlap / distanceFrom;
-
+    if    (outOfBoundsX == 0 && outOfBoundsY == 0)
+            overlap = MAP(humanX + 1, humanY + 1) + MAP(humanX - 1, humanY - 1) + MAP(humanX - 1, humanY + 1) + MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY + 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY) + MAP(humanX - 1, humanY);
+    elseif(outOfBoundsX == 0 && outOfBoundsY == 1)
+            overlap = OOB + MAP(humanX - 1, humanY - 1) + MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY) + MAP(humanX - 1, humanY);
+    elseif(outOfBoundsX == 0 && outOfBoundsY == 2)
+            overlap = OOB + MAP(humanX + 1, humanY + 1) + MAP(humanX - 1, humanY + 1)  + MAP(humanX, humanY + 1) + MAP(humanX + 1, humanY) + MAP(humanX - 1, humanY);
+    elseif(outOfBoundsX == 1 && outOfBoundsY == 0)
+            overlap = OOB + MAP(humanX - 1, humanY - 1) + MAP(humanX - 1, humanY + 1)  + MAP(humanX, humanY + 1) + MAP(humanX, humanY - 1) + MAP(humanX - 1, humanY);
+    elseif(outOfBoundsX == 1 && outOfBoundsY == 1)
+            overlap =  OOB - 2 + MAP(humanX - 1, humanY - 1)  + MAP(humanX, humanY - 1) + MAP(humanX - 1, humanY);
+    elseif(outOfBoundsX == 1 && outOfBoundsY == 2)
+            overlap = OOB -2 +  MAP(humanX - 1, humanY + 1)  + MAP(humanX, humanY + 1)  + MAP(humanX - 1, humanY);
+    elseif(outOfBoundsX == 2 && outOfBoundsY == 0)
+            overlap = OOB + MAP(humanX + 1, humanY + 1)  + MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY + 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY);
+    elseif(outOfBoundsX == 2 && outOfBoundsY == 1)
+             overlap = OOB -2 +  MAP(humanX + 1, humanY - 1) + MAP(humanX, humanY - 1) + MAP(humanX + 1, humanY);
+    elseif(outOfBoundsX == 2 && outOfBoundsY == 2)
+             overlap = OOB - 2 + MAP(humanX + 1, humanY + 1)   + MAP(humanX, humanY + 1) + MAP(humanX + 1, humanY) ;
+    end
+    overlap = overlap / 5;
+    overlap = -overlap;
+    
+    distanceFrom = distance(robotX,robotY,humanX, humanY);
+    prob_coll = overlap * (1/distanceFrom);
 end
 
 
